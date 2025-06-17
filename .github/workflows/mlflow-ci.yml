@@ -1,84 +1,111 @@
-name: Student Depression WorkFlow CI 
+name: Student Depression Model CI Workflow
 
 permissions:
   contents: write
-  
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
-      
+    branches: [main]
+
 jobs:
-  train-model:
+  train-and-deploy-model:
+    name: Train and Deploy ML Model
     runs-on: ubuntu-latest
+
     steps:
-      # 1) 
-      - name: Checkout_repository
+      # Step 1: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           persist-credentials: true
           fetch-depth: 0
 
-      # 2) 
-      - name: Setup_Python
+      # Step 2: Setup Python
+      - name: Setup Python 3.12.7
         uses: actions/setup-python@v4
         with:
           python-version: "3.12.7"
 
-      # 3) 
-      - name: Install Conda Environment
+      # Step 3: Setup Conda Environment
+      - name: Setup Conda Environment
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: depression-prediction-env
           environment-file: MLProject/conda.yaml
           auto-activate-base: false
 
-      # 4) 
-      - name: Set MLflow Tracking URI
+      # Step 4: Set MLflow Tracking Environment Variables
+      - name: Configure MLflow Tracking URI
         run: |
           echo "TOKEN_DAGSHUB=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
 
-      # 5) 
-      - name: Run MLflow Project from MLProject Directory
+      # Step 5: Run MLflow project
+      - name: Run MLflow Project
         shell: bash -l {0}
         run: |
           cd MLProject
           conda activate depression-prediction-env
           mlflow run . --env-manager=local 
 
-
-      - name: Get latest MLflow run_id
+      # Step 6: Get latest MLflow run ID
+      - name: Get Latest MLflow Run ID
         id: get_run
-        run: echo "run_id=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_OUTPUT
+        run: |
+          echo "run_id=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_ENV
 
-
-
+      # Step 7: Install Git LFS for large files
       - name: Install Git LFS
         run: |
           sudo apt-get update && sudo apt-get install git-lfs -y
           git lfs install
-          
-      - name: Track MLflow model artifacts
+
+      # Step 8: Track MLflow model artifacts using Git LFS
+      - name: Track MLflow Model Artifacts
         run: |
           git lfs track "mlruns/0/$run_id/artifacts/model/**"
           git add .gitattributes
 
-      # 6) 
-      - name: Configure Git user
+      # Step 9: Configure Git user identity
+      - name: Configure Git User
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit MLflow artifacts
+      # Step 10: Commit MLflow artifacts if any
+      - name: Commit MLflow Artifacts
         run: |
           git add mlruns/0/$run_id/artifacts/model/
           git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $run_id [skip ci]"
 
-      - name: Push changes
+      # Step 11: Push committed artifacts to main
+      - name: Push Changes to Repository
         run: git push origin main
+
+      # Step 12: Build Docker image from MLflow model
+      - name: Build MLflow Docker Image
+        run: |
+          mlflow models build-docker \
+            --model-uri "runs:/$run_id/model" \
+            --name "mh-model"
+
+      # Step 13: Docker Hub Login
+      - name: Docker Hub Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Step 14: Tag Docker image
+      - name: Tag Docker Image
+        run: |
+          docker tag mh-model:latest ${{ secrets.DOCKERHUB_USERNAME }}/mh-model:latest
+
+      # Step 15: Push Docker image to Docker Hub
+      - name: Push Docker Image to Docker Hub
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mh-model:latest
