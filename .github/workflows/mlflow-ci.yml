@@ -42,11 +42,13 @@ jobs:
 
       # 5) 
       - name: Run MLflow Project
+        shell: bash -l
         run: |
           conda activate depression-prediction-env
-          mlflow run MLproject --env-manager=local \
+          mlflow run . --env-manager=local \
             -P n_estimators=100 \
             -P max_depth=20
+
 
 
       - name: Get latest MLflow run_id
