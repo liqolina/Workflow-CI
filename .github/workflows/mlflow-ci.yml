@@ -66,7 +66,7 @@ jobs:
           
       - name: Track MLflow model artifacts
         run: |
-          git lfs track "mlruns/0/$RUN_ID/artifacts/model/**"
+          git lfs track "mlruns/0/$run_id/artifacts/model/**"
           git add .gitattributes
 
       # 6) 
@@ -77,8 +77,8 @@ jobs:
 
       - name: Commit MLflow artifacts
         run: |
-          git add mlruns/0/$RUN_ID/artifacts/model/
-          git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $RUN_ID [skip ci]"
+          git add mlruns/0/$run_id/artifacts/model/
+          git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $run_id [skip ci]"
 
       - name: Push changes
         run: git push origin main
