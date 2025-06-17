@@ -39,6 +39,7 @@ jobs:
       # 4) 
       - name: Set MLflow Tracking URI
         run: |
+          echo "TOKEN_DAGSHUB=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
