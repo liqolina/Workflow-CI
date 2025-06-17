@@ -44,12 +44,15 @@ jobs:
           echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}" >> $GITHUB_ENV
 
       # 5) 
-      - name: Run MLflow Project
+      - name: Run MLflow Project from MLProject Directory
+        shell: bash -l {0}
         run: |
           cd MLProject
+          conda activate depression-prediction-env
           mlflow run . --env-manager=local \
             -P n_estimators=100 \
             -P max_depth=20
+
 
 
 
