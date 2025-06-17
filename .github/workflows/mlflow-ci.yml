@@ -2,7 +2,7 @@ name: Student Depression WorkFlow CI
 
 permissions:
   contents: write
-
+  
 on:
   push:
     branches:
