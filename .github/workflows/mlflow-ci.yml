@@ -5,9 +5,12 @@ permissions:
 
 on:
   push:
-    branches: [master]
-  workflow_dispatch:
-
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      
 jobs:
   train-model:
     runs-on: ubuntu-latest
@@ -36,15 +39,14 @@ jobs:
       # 4) 
       - name: Set MLflow Tracking URI
         run: |
-          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_URI=https:https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}" >> $GITHUB_ENV
 
       # 5) 
       - name: Run MLflow Project
-        shell: bash -l
         run: |
-          conda activate depression-prediction-env
+          cd MLProject
           mlflow run . --env-manager=local \
             -P n_estimators=100 \
             -P max_depth=20
