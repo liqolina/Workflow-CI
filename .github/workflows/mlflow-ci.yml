@@ -36,13 +36,14 @@ jobs:
       # 4) 
       - name: Set MLflow Tracking URI
         run: |
-          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}" >> $GITHUB_ENV
 
       # 5) 
       - name: Run MLflow Project
         run: |
+          conda activate depression-prediction-env
           mlflow run MLproject --env-manager=local \
             -P n_estimators=100 \
             -P max_depth=20
@@ -57,6 +58,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install git-lfs -y
           git lfs install
+          
       - name: Track MLflow model artifacts
         run: |
           git lfs track "mlruns/0/$RUN_ID/artifacts/model/**"
