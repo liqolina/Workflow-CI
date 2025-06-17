@@ -56,7 +56,8 @@ jobs:
       - name: Get Latest MLflow Run ID
         id: get_run
         run: |
-          echo "run_id=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_ENV
+          run_id=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)
+          echo "run_id=$run_id" >> $GITHUB_ENV
 
       # Step 7: Install Git LFS for large files
       - name: Install Git LFS
