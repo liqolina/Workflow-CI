@@ -1,4 +1,4 @@
-name: Student Depression Dataset 
+name: Student Depression WorkFlow CI 
 
 permissions:
   contents: write
