@@ -54,8 +54,9 @@ jobs:
 
 
       - name: Get latest MLflow run_id
-        run: |
-          echo "RUN_ID=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_ENV
+        id: get_run
+        run: echo "run_id=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_OUTPUT
+
 
 
       - name: Install Git LFS
