@@ -12,3 +12,4 @@ dependencies:
       - numpy
       - seaborn
       - xgboost
+      - load_dotenv
