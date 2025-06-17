@@ -29,22 +29,38 @@ jobs:
       - name: Install Conda Environment
         uses: conda-incubator/setup-miniconda@v2
         with:
-          activate-environment: heart-prediction-env
+          activate-environment: depression-prediction-env
           environment-file: MLProject/conda.yaml
           auto-activate-base: false
 
       # 4) 
-      - name: Run_preprocessing
+      - name: Set MLflow Tracking URI
         run: |
-          python preprocessing/automate_LutfiAundrieHermawan.py \
-            --input ../student_depression_dataset_raw.csv \
-            --output ../preprocessing/student_depression_preprocessing.csv
+          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}" >> $GITHUB_ENV
 
       # 5) 
-      - name: Debug_contents
+      - name: Run MLflow Project
         run: |
-          echo "Contents of preprocessing folder:"
-          ls -R preprocessing/student_depression_dataset_preprocessing/
+          mlflow run MLproject --env-manager=local \
+            -P n_estimators=100 \
+            -P max_depth=20
+
+
+      - name: Get latest MLflow run_id
+        run: |
+          echo "RUN_ID=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_ENV
+
+
+      - name: Install Git LFS
+        run: |
+          sudo apt-get update && sudo apt-get install git-lfs -y
+          git lfs install
+      - name: Track MLflow model artifacts
+        run: |
+          git lfs track "mlruns/0/$RUN_ID/artifacts/model/**"
+          git add .gitattributes
 
       # 6) 
       - name: Configure Git user
@@ -52,17 +68,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit preprocessed data
+      - name: Commit MLflow artifacts
         run: |
-          git add preprocessing/student_depression_dataset_preprocessing/
-          git diff --quiet && echo "No changes to commit" || git commit -m "chore: update preprocessed dataset [skip ci]"
+          git add mlruns/0/$RUN_ID/artifacts/model/
+          git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $RUN_ID [skip ci]"
 
       - name: Push changes
-        run: git push origin master
-
-      # 7)
-      - name: Upload preprocessed dataset artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: student-depression-preprocessed
-          path: preprocessing/student_depression_dataset_preprocessing/
+        run: git push origin main
