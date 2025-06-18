@@ -36,7 +36,7 @@ jobs:
 
       - name: Run MLflow Project
         env:
-          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+          DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
         run: |
           cd MLProject
           mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv > mlflow_output.log
