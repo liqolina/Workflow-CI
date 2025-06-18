@@ -62,7 +62,12 @@ jobs:
               echo "No model directory found at $MODEL_DIR"
             fi
           done
-          git add .gitattributes
+          
+          if [ -f ".gitattributes" ]; then
+            git add .gitattributes
+          else
+            echo "No .gitattributes file to add"
+          fi
 
       # 7. Commit & push model artifacts
       - name: Configure Git
