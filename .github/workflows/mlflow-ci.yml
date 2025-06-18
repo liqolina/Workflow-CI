@@ -36,7 +36,7 @@ jobs:
       # 4. Run MLflow project
       - name: Run MLflow Project
         run: |
-          mlflow run . --env-manager=local \
+          mlflow run MLProject  --env-manager=local \
             -P n_estimators=150 \
             -P max_depth=42
 
