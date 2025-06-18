@@ -18,17 +18,14 @@ from sklearn.metrics import (
 
 def log_metrics(y_true, y_pred, y_proba):
     acc = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
-    recall = recall_score(y_true, y_pred, average='weighted')
-    f1 = f1_score(y_true, y_pred, average='weighted')
-    auc = roc_auc_score(y_true, y_proba, multi_class='ovr') if y_proba.shape[1] > 1 else roc_auc_score(y_true, y_proba[:, 1])
+    precision = precision_score(y_true, y_pred, average='binary', zero_division=0)
+    recall = recall_score(y_true, y_pred, average='binary')
+    f1 = f1_score(y_true, y_pred, average='binary')
+    auc = roc_auc_score(y_true, y_proba[:, 1])  # <- this is the fix
     loss = log_loss(y_true, y_proba)
 
     cm = confusion_matrix(y_true, y_pred)
-    tn = cm[0][0] if cm.shape[0] > 0 else 0
-    tp = cm[1][1] if cm.shape[0] > 1 else 0
-    fp = cm[0][1] if cm.shape[1] > 1 else 0
-    fn = cm[1][0] if cm.shape[0] > 1 else 0
+    tn, fp, fn, tp = cm.ravel() if cm.shape == (2, 2) else (0, 0, 0, 0)
 
     mlflow.log_metric("accuracy", acc)
     mlflow.log_metric("precision", precision)
