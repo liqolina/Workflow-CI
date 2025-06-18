@@ -136,6 +136,8 @@ jobs:
           git config user.name "liqolina"
           git config user.email "lutfiaunher@gmail.com"
 
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}
+
           git add mlruns/ .gitattributes
           git commit -m "Add MLflow artifacts to LFS" || echo "No changes to commit"
           git push origin main
