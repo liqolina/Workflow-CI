@@ -81,7 +81,7 @@ jobs:
           git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $RUN_ID [skip ci]"
 
       - name: Push to GitHub
-        run: git push origin master
+        run: git push origin main
 
       # 8. Build Docker image from MLflow model
       - name: Build Docker image for MLflow model
