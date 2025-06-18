@@ -40,7 +40,6 @@ jobs:
         run: |
           cd MLProject
           mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv | tee mlflow_output.log
-          ls -la Membangun_model/ || echo "Directory 'Membangun_model' not found"
 
           # Extract run IDs
           run_ids=($(grep 'MLFLOW_RUN_ID=' mlflow_output.log | cut -d'=' -f2))
