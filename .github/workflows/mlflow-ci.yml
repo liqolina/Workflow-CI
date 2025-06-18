@@ -39,7 +39,7 @@ jobs:
           DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
         run: |
           cd MLProject
-          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv > mlflow_output.log
+          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv | tee mlflow_output.log
           ls -la Membangun_model/ || echo "Directory 'Membangun_model' not found"
 
           # Extract run IDs
