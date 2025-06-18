@@ -51,9 +51,12 @@ jobs:
           sudo apt-get update && sudo apt-get install git-lfs -y
           git lfs install
 
-      - name: Track model artifacts with Git LFS
+      - name: Track model artifacts
         run: |
-          git lfs track "mlruns/0/$RUN_ID/artifacts/model/**"
+          for MODEL_DIR in mlruns/0/$RUN_ID/artifacts/*_model/; do
+            git lfs track "$MODEL_DIR**"
+            git add "$MODEL_DIR"
+          done
           git add .gitattributes
 
       # 7. Commit & push model artifacts
