@@ -53,9 +53,7 @@ jobs:
 
       - name: Track and Add Model Artifacts
         run: |
-            git lfs track "mlruns/0/$RUN_ID/artifacts/logistic_regression/**"
-            git lfs track "mlruns/0/$RUN_ID/artifacts/random_forest/**"
-            git lfs track "mlruns/0/$RUN_ID/artifacts/xgboost/**"
+            git lfs track "mlruns/0/$RUN_ID/artifacts/*_model/**"
             git add .gitattributes
 
       # 7. Commit & push model artifacts
@@ -66,9 +64,7 @@ jobs:
 
       - name: Commit MLflow artifacts
         run: |
-          git add mlruns/0/$RUN_ID/artifacts/logistic_regression/
-          git add mlruns/0/$RUN_ID/artifacts/random_forest/
-          git add mlruns/0/$RUN_ID/artifacts/xgboost/
+          git add mlruns/0/$RUN_ID/artifacts/*_model/
           git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $RUN_ID [skip ci]"
 
       - name: Push to GitHub
