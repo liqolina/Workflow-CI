@@ -154,8 +154,10 @@ def main():
         ("XGBoost", XGBClassifier(n_estimators=100, learning_rate=0.1, random_state=42, use_label_encoder=False, eval_metric='logloss'))
     ]
 
+
+    feature_names = X_train.columns.tolist()
     for model_name, model in models:
-        train_and_log_classifier(model, model_name, X_train, X_test, y_train, y_test)
+        train_and_log_classifier(model, model_name, X_train, X_test, y_train, y_test, feature_names)
 
 if __name__ == "__main__":
     main()
