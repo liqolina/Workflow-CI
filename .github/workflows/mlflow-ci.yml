@@ -2,115 +2,92 @@ name: Student Depression Model CI Workflow
 
 permissions:
   contents: write
-  
+
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
-  train-and-deploy-model:
-    name: Train and Deploy ML Model
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           persist-credentials: true
           fetch-depth: 0
 
-      # Step 2: Setup Python
-      - name: Setup Python 3.12.7
+      # 2. Setup Python
+      - name: Set up Python 3.12.7
         uses: actions/setup-python@v4
         with:
           python-version: "3.12.7"
 
-      # Step 3: Setup Conda Environment
-      - name: Setup Conda Environment
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          activate-environment: depression-prediction-env
-          environment-file: MLProject/conda.yaml
-          auto-activate-base: false
-
-      # Step 4: Set MLflow Tracking Environment Variables
-      - name: Configure MLflow Tracking URI
+      # 3. Install Python dependencies
+      - name: Install dependencies
         run: |
-          echo "TOKEN_DAGSHUB=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
+          python -m pip install --upgrade pip
+          pip install mlflow pandas numpy scikit-learn matplotlib xgboost
 
-      # Step 5: Run MLflow project
+      # 4. Run MLflow project
       - name: Run MLflow Project
-        shell: bash -l {0}
         run: |
-          cd MLProject
-          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv > mlflow_output.log
-          ls -la Membangun_model/ || echo "Membangun_model directory not found"
-          # Ambil semua run ID dari log
-          run_ids=($(grep 'MLFLOW_RUN_ID=' mlflow_output.log | cut -d'=' -f2))
-          # Assign run ID berdasarkan urutan di modelling.py
-          linear_run_id=${run_ids[0]}
-          rf_run_id=${run_ids[1]}
-          xgb_run_id=${run_ids[2]}
-          if [ -z "$xgb_run_id" ]; then
-            echo "No run ID found for XGBoost"
-            cat mlflow_output.log
-            exit 1
+          mlflow run MLproject --env-manager=local \
+            -P n_estimators=100 \
+            -P max_depth=20
 
+      # 5. Get latest run_id
+      - name: Get latest MLflow run_id
+        run: |
+          echo "RUN_ID=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_ENV
 
-      # Step 7: Install Git LFS for large files
+      # 6. Setup Git LFS & track model artifacts
       - name: Install Git LFS
         run: |
           sudo apt-get update && sudo apt-get install git-lfs -y
           git lfs install
 
-      # Step 8: Track MLflow model artifacts using Git LFS
-      - name: Track MLflow Model Artifacts
+      - name: Track model artifacts with Git LFS
         run: |
-          git lfs track "mlruns/0/$run_id/artifacts/model/**"
+          git lfs track "mlruns/0/$RUN_ID/artifacts/model/**"
           git add .gitattributes
 
-      # Step 9: Configure Git user identity
-      - name: Configure Git User
+      # 7. Commit & push model artifacts
+      - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 10: Commit MLflow artifacts if any
-      - name: Commit MLflow Artifacts
+      - name: Commit MLflow artifacts
         run: |
-          git add mlruns/0/$run_id/artifacts/model/
-          git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $run_id [skip ci]"
+          git add mlruns/0/$RUN_ID/artifacts/model/
+          git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $RUN_ID [skip ci]"
 
-      # Step 11: Push committed artifacts to main
-      - name: Push Changes to Repository
-        run: git push origin main
+      - name: Push to GitHub
+        run: git push origin master
 
-      # Step 12: Build Docker image from MLflow model
-      - name: Build MLflow Docker Image
+      # 8. Build Docker image from MLflow model
+      - name: Build Docker image for MLflow model
         run: |
           mlflow models build-docker \
-            --model-uri "runs:/$run_id/model" \
-            --name "mh-model"
+            --model-uri "runs:/$RUN_ID/model" \
+            --name "ml-model"
 
-      # Step 13: Docker Hub Login
-      - name: Docker Hub Login
+      # 9. Docker login and push to Docker Hub
+      - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Step 14: Tag Docker image
-      - name: Tag Docker Image
+      - name: Tag Docker image
         run: |
-          docker tag mh-model:latest ${{ secrets.DOCKERHUB_USERNAME }}/mh-model:latest
+          docker tag ml-model:latest ${{ secrets.DOCKERHUB_USERNAME }}/ml-model:latest
 
-      # Step 15: Push Docker image to Docker Hub
-      - name: Push Docker Image to Docker Hub
+      - name: Push Docker image
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mh-model:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/ml-model:latest
