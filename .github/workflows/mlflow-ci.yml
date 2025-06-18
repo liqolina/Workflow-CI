@@ -52,11 +52,29 @@ jobs:
           conda activate depression-prediction-env
           mlflow run . --env-manager=local 
 
-      # Step 6: Get latest MLflow run ID
-      - name: Get Latest MLflow Run ID
-        id: get_run
+      # Step 6: Get Latest MLflow Run ID via MLflow API
+      - name: Get Latest MLflow Run ID via MLflow API
+        shell: bash -l {0}
         run: |
-          echo "run_id=$(ls -td mlruns/0/*/ | head -n1 | xargs basename)" >> $GITHUB_ENV
+          cd MLProject
+          conda activate depression-prediction-env
+          run_id=$(python -c "
+      import mlflow
+      client = mlflow.tracking.MlflowClient()
+      experiments = client.list_experiments()
+      latest_run = None
+      for exp in experiments:
+          runs = client.search_runs([exp.experiment_id], order_by=['start_time DESC'], max_results=1)
+          if runs:
+              latest_run = runs[0].info.run_id
+              break
+      if latest_run:
+          print(latest_run)
+      else:
+          raise Exception('No MLflow runs found.')
+      ")
+          echo "run_id=$run_id" >> $GITHUB_ENV
+
 
       # Step 7: Install Git LFS for large files
       - name: Install Git LFS
