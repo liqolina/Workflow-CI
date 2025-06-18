@@ -32,7 +32,7 @@ jobs:
         run: |
           echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow"
           echo "MLFLOW_TRACKING_USERNAME=liqolina"
-          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}"
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}"
 
       - name: Run MLflow Project
         env:
@@ -63,7 +63,7 @@ jobs:
 
       - name: Download MLflow Artifacts
         env:
-          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+          DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
         run: |
           export MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI
           export MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME
