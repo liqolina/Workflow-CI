@@ -58,21 +58,22 @@ jobs:
         run: |
           cd MLProject
           conda activate depression-prediction-env
-          run_id=$(python -c "
+          run_id=$(python - <<EOF
       import mlflow
       client = mlflow.tracking.MlflowClient()
       experiments = client.list_experiments()
       latest_run = None
       for exp in experiments:
-          runs = client.search_runs([exp.experiment_id], order_by=['start_time DESC'], max_results=1)
+          runs = client.search_runs([exp.experiment_id], order_by=["start_time DESC"], max_results=1)
           if runs:
               latest_run = runs[0].info.run_id
               break
       if latest_run:
           print(latest_run)
       else:
-          raise Exception('No MLflow runs found.')
-      ")
+          raise Exception("No MLflow runs found.")
+      EOF
+      )
           echo "run_id=$run_id" >> $GITHUB_ENV
 
 
