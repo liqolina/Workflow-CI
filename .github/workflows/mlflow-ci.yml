@@ -5,16 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-
+    
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    env:
-      MLFLOW_TRACKING_URI: https://dagshub.com/liqolina/Workflow-CI.mlflow
-      MLFLOW_TRACKING_USERNAME: liqolina
-      MLFLOW_TRACKING_PASSWORD: ${{ secrets.TOKEN_DAGSHUB }}
-      DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
 
     steps:
       - name: Checkout Repository
@@ -25,7 +19,7 @@ jobs:
         with:
           python-version: "3.12.7"
 
-      - name: Check Python Environment
+      - name: Check Env
         run: |
           python --version
           pip --version
@@ -34,78 +28,103 @@ jobs:
         run: |
           pip install mlflow==2.17.0 scikit-learn==1.5.2 pandas==2.2.3 numpy==2.1.2 xgboost==2.1.1 matplotlib==3.9.2 seaborn==0.13.2 python-dotenv==1.0.1
 
+      - name: Configure MLflow Tracking
+        run: |
+          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
+
       - name: Run MLflow Project
+        env:
+          DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
         run: |
           cd MLProject
-          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv | tee ../mlflow_output.log
+          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv | tee mlflow_output.log
 
-      - name: Extract Run IDs
-        run: |
+          # Extract run IDs
           run_ids=($(grep 'MLFLOW_RUN_ID=' mlflow_output.log | cut -d'=' -f2))
-          echo "linear_run_id=${run_ids[0]}" >> $GITHUB_ENV
-          echo "rf_run_id=${run_ids[1]}" >> $GITHUB_ENV
-          echo "xgb_run_id=${run_ids[2]}" >> $GITHUB_ENV
+          linear_run_id=${run_ids[0]}
+          rf_run_id=${run_ids[1]}
+          xgb_run_id=${run_ids[2]}
 
-          echo "Extracted Run IDs:"
-          echo "Linear: ${run_ids[0]}"
-          echo "Random Forest: ${run_ids[1]}"
-          echo "XGBoost: ${run_ids[2]}"
+          if [ -z "$xgb_run_id" ]; then
+            echo "XGBoost run ID not found"
+            cat mlflow_output.log
+            exit 1
+          fi
+
+          echo "linear_run_id=$linear_run_id" >> $GITHUB_ENV
+          echo "rf_run_id=$rf_run_id"
+          echo "xgb_run_id=$xgb_run_id"
+
+          echo "Linear Regression Run ID: $linear_run_id"
+          echo "Random Forest Run ID: $rf_run_id"
+          echo "XGBoost Run ID: $xgb_run_id"
 
       - name: Download MLflow Artifacts
+        env:
+          DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
         run: |
+          export MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI
+          export MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME
+          export MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD
+
           mkdir -p mlruns/0
+
           cat << 'EOF' > download_run.py
-import mlflow
-from mlflow.tracking import MlflowClient
-import os, traceback, sys
+          import mlflow
+          from mlflow.tracking import MlflowClient
+          import os, traceback
 
-def download_run(run_id, dst_path):
-    client = MlflowClient()
-    os.makedirs(dst_path, exist_ok=True)
-    try:
-        artifact_path = client.download_artifacts(run_id, ".", dst_path)
-        print(f"Downloaded artifacts for {run_id} to {artifact_path}")
-    except Exception as e:
-        print(f"Download failed for {run_id}: {e}")
-        traceback.print_exc()
-        os.makedirs(os.path.join(dst_path, "artifacts"), exist_ok=True)
+          def download_run(run_id, dst_path):
+              client = MlflowClient()
+              os.makedirs(dst_path, exist_ok=True)
+              try:
+                  artifact_path = client.download_artifacts(run_id, ".", dst_path)
+                  print(f"Downloaded artifacts for {run_id} to {artifact_path}")
+              except Exception as e:
+                  print(f"Download failed for {run_id}: {e}")
+                  traceback.print_exc()
+                  os.makedirs(os.path.join(dst_path, "artifacts"), exist_ok=True)
 
-    try:
-        artifacts = client.list_artifacts(run_id)
-        print(f"Artifacts for {run_id}: {[a.path for a in artifacts]}")
-    except Exception as e:
-        print(f"List artifacts failed for {run_id}: {e}")
-        traceback.print_exc()
+              try:
+                  artifacts = client.list_artifacts(run_id)
+                  print(f"Artifacts for {run_id}: {[a.path for a in artifacts]}")
+              except Exception as e:
+                  print(f"List artifacts failed for {run_id}: {e}")
+                  traceback.print_exc()
 
-    try:
-        run = client.get_run(run_id)
-        with open(os.path.join(dst_path, "meta.yaml"), "w") as f:
-            f.write(f"""artifact_uri: {run.info.artifact_uri}
-end_time: {run.info.end_time}
-experiment_id: {run.info.experiment_id}
-lifecycle_stage: {run.info.lifecycle_stage}
-run_id: {run.info.run_id}
-run_uuid: {run.info.run_uuid}
-start_time: {run.info.start_time}
-status: {run.info.status}
-user_id: {run.info.user_id}
-""")
-        print(f"meta.yaml created for {run_id}")
-    except Exception as e:
-        print(f"meta.yaml creation failed for {run_id}: {e}")
-        traceback.print_exc()
-        exit(1)
+              try:
+                  run = client.get_run(run_id)
+                  with open(os.path.join(dst_path, "meta.yaml"), "w") as f:
+                      f.write(f"""artifact_uri: {run.info.artifact_uri}
+                      end_time: {run.info.end_time}
+                      experiment_id: {run.info.experiment_id}
+                      lifecycle_stage: {run.info.lifecycle_stage}
+                      run_id: {run.info.run_id}
+                      run_uuid: {run.info.run_uuid}
+                      start_time: {run.info.start_time}
+                      status: {run.info.status}
+                      user_id: {run.info.user_id}
+                      """)
+                      
+                  print(f"meta.yaml created for {run_id}")
+                  
+              except Exception as e:
+                  print(f"meta.yaml creation failed for {run_id}: {e}")
+                  traceback.print_exc()
+                  exit(1)
 
-if __name__ == "__main__":
-    for run_id in sys.argv[1:]:
-        dst_path = f"mlruns/0/{run_id}"
-        download_run(run_id, dst_path)
-        if not os.path.exists(f"{dst_path}/meta.yaml"):
-            print(f"Incomplete artifacts for {run_id}")
-            exit(1)
-EOF
+          if __name__ == "__main__":
+              for run_id in ["${{ env.linear_run_id }}", "${{ env.rf_run_id }}", "${{ env.xgb_run_id }}"]:
+                  dst_path = f"mlruns/0/{run_id}"
+                  download_run(run_id, dst_path)
+                  if not os.path.exists(f"{dst_path}/meta.yaml"):
+                      print(f"Incomplete artifacts for {run_id}")
+                      exit(1)
+          EOF
 
-          python download_run.py "${{ env.linear_run_id }}" "${{ env.rf_run_id }}" "${{ env.xgb_run_id }}"
+          python download_run.py
           ls -la mlruns/
 
       - name: Upload Artifacts to GitHub LFS
@@ -114,6 +133,7 @@ EOF
           git lfs track "mlruns/**/*"
           git config user.name "liqolina"
           git config user.email "lutfiaunher@gmail.com"
+
           git add mlruns/ .gitattributes
           git commit -m "Add MLflow artifacts to LFS" || echo "No changes to commit"
           git push origin main
@@ -122,10 +142,6 @@ EOF
 
       - name: Build Docker Image
         run: |
-          if [ -z "${{ env.xgb_run_id }}" ]; then
-            echo "Missing XGBoost RUN_ID"
-            exit 1
-          fi
           docker build \
             -t workflow-ci:latest \
             --build-arg RUN_ID=${{ env.xgb_run_id }} \
