@@ -40,7 +40,7 @@ jobs:
       - name: Configure MLflow Tracking URI
         run: |
           echo "TOKEN_DAGSHUB=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
           echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
 
@@ -49,7 +49,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd MLProject
-          mlflow run . --env-manager=local -P data_path=student_habits_preprocessing.csv > mlflow_output.log
+          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv > mlflow_output.log
           ls -la Membangun_model/ || echo "Membangun_model directory not found"
           # Ambil semua run ID dari log
           run_ids=($(grep 'MLFLOW_RUN_ID=' mlflow_output.log | cut -d'=' -f2))
