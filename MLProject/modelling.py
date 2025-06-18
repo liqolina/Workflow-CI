@@ -54,7 +54,7 @@ def train_and_log_model(model_name, model, mlflow_log_fn, X_train, X_test, y_tra
         proba = model.predict_proba(X_test)
 
         log_metrics(y_test, preds, proba)
-        mlflow_log_fn(model, "model")
+        mlflow_log_fn(model, artifact_path=f"{model_name}_model")
 
 
 if __name__ == "__main__":
