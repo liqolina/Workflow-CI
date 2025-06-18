@@ -53,21 +53,8 @@ jobs:
 
       - name: Track and Add Model Artifacts
         run: |
-          for MODEL_DIR in mlruns/0/$RUN_ID/artifacts/*_model; do
-            if [ -d "$MODEL_DIR" ]; then
-              echo "Tracking $MODEL_DIR/**"
-              git lfs track "$MODEL_DIR/**"
-              git add "$MODEL_DIR"
-            else
-              echo "No model directory found at $MODEL_DIR"
-            fi
-          done
-          
-          if [ -f ".gitattributes" ]; then
+            git lfs track "mlruns/0/$RUN_ID/artifacts/model/**"
             git add .gitattributes
-          else
-            echo "No .gitattributes file to add"
-          fi
 
       # 7. Commit & push model artifacts
       - name: Configure Git
