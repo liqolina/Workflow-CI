@@ -4,6 +4,7 @@ import pandas as pd
 import mlflow
 import mlflow.sklearn
 import mlflow.xgboost
+import argparse
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -44,13 +45,13 @@ def log_metrics(y_true, y_pred, y_proba):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Usage: python run_classifier.py model_name n_estimators max_depth")
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--n_estimators", type=int, default=100)
+    parser.add_argument("--max_depth", type=int, default=5)
+    args = parser.parse_args()
 
-    model_name = sys.argv[1].lower()
-    n_estimators = int(sys.argv[2])
-    max_depth = int(sys.argv[3])
+    n_estimators = args.n_estimators
+    max_depth = args.max_depth
 
     # Load and preprocess the dataset
     data_path = "student_depression_preprocessing.csv"
