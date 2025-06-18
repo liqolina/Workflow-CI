@@ -54,8 +54,8 @@ jobs:
           fi
 
           echo "linear_run_id=$linear_run_id" >> $GITHUB_ENV
-          echo "rf_run_id=$rf_run_id"
-          echo "xgb_run_id=$xgb_run_id"
+          echo "rf_run_id=$rf_run_id" >> $GITHUB_ENV
+          echo "xgb_run_id=$xgb_run_id" >> $GITHUB_ENV
 
           echo "Linear Regression Run ID: $linear_run_id"
           echo "Random Forest Run ID: $rf_run_id"
