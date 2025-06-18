@@ -121,7 +121,7 @@ def configure_mlflow():
     # For DagsHub
     load_dotenv()
 
-    tracking_uri = 'https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow'
+    tracking_uri = 'https://dagshub.com/liqolina/Workflow-CI.mlflow'
     username = 'liqolina'
     token = os.getenv('TOKEN_DAGSHUB')
 
