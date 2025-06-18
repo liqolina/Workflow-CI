@@ -106,7 +106,21 @@ def train_and_log_model(model, model_name, X_train, X_test, y_train, y_test, fea
         )
 
 def configure_mlflow():
+    """
+    Main function to run the experiment.
+    """
+
+    ## Tracking URI - Local
+    
+    #mlflow.set_tracking_uri("http://127.0.0.1:5000")  # Lokal
+    #mlflow.set_experiment("Student_Depression_Prediction")
+
+    ## Autolog
+    #mlflow.autolog(disable=False)
+
+    # For DagsHub
     load_dotenv()
+
     tracking_uri = 'https://dagshub.com/liqolina/Eksperimen_SML_LutfiAundrieHermawan.mlflow'
     username = 'liqolina'
     token = os.getenv('TOKEN_DAGSHUB')
