@@ -49,32 +49,18 @@ jobs:
         shell: bash -l {0}
         run: |
           cd MLProject
-          conda activate depression-prediction-env
-          mlflow run . --env-manager=local 
-
-      # Step 6: Get Latest MLflow Run ID via MLflow API
-      - name: Get Latest MLflow Run ID via MLflow API
-        shell: bash -l {0}
-        run: |
-          cd MLProject
-          conda activate depression-prediction-env
-          run_id=$(python - <<EOF
-      import mlflow
-      client = mlflow.tracking.MlflowClient()
-      experiments = client.list_experiments()
-      latest_run = None
-      for exp in experiments:
-          runs = client.search_runs([exp.experiment_id], order_by=["start_time DESC"], max_results=1)
-          if runs:
-              latest_run = runs[0].info.run_id
-              break
-      if latest_run:
-          print(latest_run)
-      else:
-          raise Exception("No MLflow runs found.")
-      EOF
-      )
-          echo "run_id=$run_id" >> $GITHUB_ENV
+          mlflow run . --env-manager=local -P data_path=student_habits_preprocessing.csv > mlflow_output.log
+          ls -la Membangun_model/ || echo "Membangun_model directory not found"
+          # Ambil semua run ID dari log
+          run_ids=($(grep 'MLFLOW_RUN_ID=' mlflow_output.log | cut -d'=' -f2))
+          # Assign run ID berdasarkan urutan di modelling.py
+          linear_run_id=${run_ids[0]}
+          rf_run_id=${run_ids[1]}
+          xgb_run_id=${run_ids[2]}
+          if [ -z "$xgb_run_id" ]; then
+            echo "No run ID found for XGBoost"
+            cat mlflow_output.log
+            exit 1
 
 
       # Step 7: Install Git LFS for large files
