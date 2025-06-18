@@ -114,7 +114,7 @@ def configure_mlflow():
     load_dotenv()
     tracking_uri = 'https://dagshub.com/liqolina/Workflow-CI.mlflow'
     username = 'liqolina'
-    token = os.getenv('TOKEN_DAGSHUB')
+    token = os.getenv('DAGSHUB_TOKEN')
 
     if not token:
         raise EnvironmentError("TOKEN_DAGSHUB environment variable is not set.")
