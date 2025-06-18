@@ -30,9 +30,9 @@ jobs:
 
       - name: Configure MLflow Tracking
         run: |
-          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow"
+          echo "MLFLOW_TRACKING_USERNAME=liqolina"
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}"
 
       - name: Run MLflow Project
         env:
@@ -54,9 +54,9 @@ jobs:
             exit 1
           fi
 
-          echo "linear_run_id=$linear_run_id" >> $GITHUB_ENV
-          echo "rf_run_id=$rf_run_id" >> $GITHUB_ENV
-          echo "xgb_run_id=$xgb_run_id" >> $GITHUB_ENV
+          echo "linear_run_id=$linear_run_id"
+          echo "rf_run_id=$rf_run_id"
+          echo "xgb_run_id=$xgb_run_id"
 
           echo "Linear Regression Run ID: $linear_run_id"
           echo "Random Forest Run ID: $rf_run_id"
