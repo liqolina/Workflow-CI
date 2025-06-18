@@ -1,151 +1,65 @@
+import sys
 import os
-import numpy as np
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import (
-    r2_score, mean_squared_error, mean_absolute_error,
-    median_absolute_error, max_error, explained_variance_score
-)
-from xgboost import XGBRegressor
-
 import mlflow
 import mlflow.sklearn
 import mlflow.xgboost
 
-from dotenv import load_dotenv
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score,
+    f1_score, roc_auc_score, log_loss, confusion_matrix
+)
+from xgboost import XGBClassifier
 
-def mean_absolute_percentage_error(y_true, y_pred):
-    return np.mean(np.abs((y_true - y_pred) / (y_true + 1e-10))) * 100
 
-def max_absolute_error(y_true, y_pred):
-    return np.max(np.abs(y_true - y_pred))
+def log_metrics(y_true, y_pred, y_proba):
+    acc = accuracy_score(y_true, y_pred)
+    precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+    recall = recall_score(y_true, y_pred, average='weighted')
+    f1 = f1_score(y_true, y_pred, average='weighted')
+    auc = roc_auc_score(y_true, y_proba, multi_class='ovr') if y_proba.shape[1] > 1 else roc_auc_score(y_true, y_proba[:, 1])
+    loss = log_loss(y_true, y_proba)
 
-def log_model_metrics(y_true, y_pred, training_time=None):
-    metrics = {
-        "r2_score": r2_score(y_true, y_pred),
-        "rmse": np.sqrt(mean_squared_error(y_true, y_pred)),
-        "mae": mean_absolute_error(y_true, y_pred),
-        "mape": mean_absolute_percentage_error(y_true, y_pred),
-        "explained_variance": explained_variance_score(y_true, y_pred),
-        "median_absolute_error": median_absolute_error(y_true, y_pred),
-        "max_absolute_error": max_absolute_error(y_true, y_pred),
-        "max_error": max_error(y_true, y_pred),
-    }
-    if training_time is not None:
-        metrics["training_time"] = training_time
-    return metrics
+    cm = confusion_matrix(y_true, y_pred)
+    tn = cm[0][0] if cm.shape[0] > 0 else 0
+    tp = cm[1][1] if cm.shape[0] > 1 else 0
+    fp = cm[0][1] if cm.shape[1] > 1 else 0
+    fn = cm[1][0] if cm.shape[0] > 1 else 0
 
-def plot_predictions(y_true, y_pred, model_name, output_dir):
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(x=y_true, y=y_pred, alpha=0.6)
-    plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--')
-    plt.xlabel('Actual')
-    plt.ylabel('Predicted')
-    plt.title(f'Predicted vs Actual ({model_name})')
-    plt.grid(True)
+    mlflow.log_metric("accuracy", acc)
+    mlflow.log_metric("precision", precision)
+    mlflow.log_metric("recall", recall)
+    mlflow.log_metric("f1_score", f1)
+    mlflow.log_metric("roc_auc", auc)
+    mlflow.log_metric("log_loss", loss)
+    mlflow.log_metric("true_positive", tp)
+    mlflow.log_metric("true_negative", tn)
+    mlflow.log_metric("false_positive", fp)
+    mlflow.log_metric("false_negative", fn)
 
-    plot_path = os.path.join(output_dir, f"{model_name}_prediksi.png")
-    plt.savefig(plot_path)
-    plt.close()
-    return plot_path
+    print(f"Run finished. Accuracy: {acc:.4f} | F1 Score: {f1:.4f} | AUC: {auc:.4f}")
 
-def train_and_log_model(model, model_name, X_train, X_test, y_train, y_test, feature_names=None, params=None):
-    with mlflow.start_run(run_name=model_name) as run:
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
 
-        metrics = log_model_metrics(y_test, y_pred)
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print("Usage: python run_classifier.py model_name n_estimators max_depth")
+        sys.exit(1)
 
-        mlflow.log_param("model_type", model_name)
-        if params:
-            for key, val in params.items():
-                mlflow.log_param(key, val)
+    model_name = sys.argv[1].lower()
+    n_estimators = int(sys.argv[2])
+    max_depth = int(sys.argv[3])
 
-        for key, val in metrics.items():
-            mlflow.log_metric(key, val)
-
-        input_example = X_train[:5]
-        if model_name.lower().startswith("xgboost"):
-            mlflow.xgboost.log_model(model, model_name, input_example=input_example)
-        else:
-            mlflow.sklearn.log_model(model, model_name, input_example=input_example)
-
-        output_dir = "Actual_VS_Predicted_Graph"
-        os.makedirs(output_dir, exist_ok=True)
-        plot_path = plot_predictions(y_test, y_pred, model_name, output_dir)
-        mlflow.log_artifact(plot_path)
-
-        # Debug
-        print(f"MLflow artifact root: {os.getenv('MLFLOW_ARTIFACT_ROOT', 'mlruns')}")
-        print(f"Current working directory: {os.getcwd()}")
-        print(f"Plot path exists: {os.path.exists(plot_path)}")
-        print(f"Run ID: {run.info.run_id}")
-        
-        # Debug: Cek artifacts di DagsHub
-        client = mlflow.tracking.MlflowClient()
-        try:
-            artifacts = client.list_artifacts(run.info.run_id)
-            print(f"Artifacts for run_id {run.info.run_id}: {[a.path for a in artifacts]}")
-        except Exception as e:
-            print(f"Failed to list artifacts for run_id {run.info.run_id}: {str(e)}")
-        
-        # Cetak run_id untuk GitHub Actions
-        run_id = run.info.run_id
-        print(f"MLFLOW_RUN_ID={run_id}")
-
-        print(
-            f"{model_name} - "
-            f"R²: {metrics['r2_score']:.4f}, RMSE: {metrics['rmse']:.4f}, MAE: {metrics['mae']:.4f}, "
-            f"MAPE: {metrics['mape']:.2f}%, Explained Variance: {metrics['explained_variance']:.4f}, "
-            f"MedAE: {metrics['median_absolute_error']:.4f}, MaxAE: {metrics['max_absolute_error']:.4f}"
-        )
-
-def configure_mlflow():
-    """
-    Main function to run the experiment.
-    """
-
-    ## Tracking URI - Local
-    
-    #mlflow.set_tracking_uri("http://127.0.0.1:5000")  # Lokal
-    #mlflow.set_experiment("Student_Depression_Prediction")
-
-    ## Autolog
-    #mlflow.autolog(disable=False)
-
-    # For DagsHub
-    load_dotenv()
-
-    tracking_uri = 'https://dagshub.com/liqolina/Workflow-CI.mlflow'
-    username = 'liqolina'
-    token = os.getenv('TOKEN_DAGSHUB')
-
-    if not token:
-        raise EnvironmentError("TOKEN_DAGSHUB environment variable is not set.")
-
-    os.environ['MLFLOW_TRACKING_URI'] = tracking_uri
-    os.environ['MLFLOW_TRACKING_USERNAME'] = username
-    os.environ['MLFLOW_TRACKING_PASSWORD'] = token
-    mlflow.set_tracking_uri(tracking_uri)
-    mlflow.set_experiment("Student_Depression_Prediction")
-
-def main():
-    configure_mlflow()
-
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    data_path = os.path.join(base_dir, 'student_depression_preprocessing.csv')
-
+    # Load and preprocess the dataset
+    data_path = "student_depression_preprocessing.csv"
     if not os.path.exists(data_path):
-        raise FileNotFoundError("File 'student_depression_preprocessing.csv' tidak ditemukan.")
+        raise FileNotFoundError(f"File not found: {data_path}")
 
     df = pd.read_csv(data_path)
 
-    y = df['Depression']
+    y = df['Depression']  # Ensure this is binary or categorical
     X = df.drop(columns=[
         'Depression',
         'Have you ever had suicidal thoughts ?_Yes',
@@ -154,16 +68,41 @@ def main():
         'Stress_Balance_Ratio', 'Age_Group', 'CGPA_Category'
     ])
 
+    feature_names = X.columns.tolist()
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    models = [
-        ("Linear Regression", LinearRegression()),
-        ("Random Forest", RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42)),
-        ("XGBoost", XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42))
-    ]
+    with mlflow.start_run():
+        mlflow.log_param("model_name", model_name)
+        mlflow.log_param("n_estimators", n_estimators)
+        mlflow.log_param("max_depth", max_depth)
+        mlflow.log_param("n_features", X_train.shape[1])
+        mlflow.log_param("n_classes", len(y_train.unique()))
 
-    for model_name, model in models:
-        train_and_log_model(model, model_name, X_train, X_test, y_train, y_test)
+        # Select model
+        if model_name == "random_forest":
+            model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42)
+            model.fit(X_train, y_train)
+            mlflow_model_fn = mlflow.sklearn.log_model
 
-if __name__ == "__main__":
-    main()
+        elif model_name == "logistic_regression":
+            model = LogisticRegression(max_iter=1000)
+            model.fit(X_train, y_train)
+            mlflow_model_fn = mlflow.sklearn.log_model
+
+        elif model_name == "xgboost":
+            model = XGBClassifier(
+                n_estimators=n_estimators, max_depth=max_depth,
+                use_label_encoder=False, eval_metric='logloss',
+                random_state=42
+            )
+            model.fit(X_train, y_train)
+            mlflow_model_fn = mlflow.xgboost.log_model
+
+        else:
+            raise ValueError("Supported models: logistic_regression, random_forest, xgboost")
+
+        preds = model.predict(X_test)
+        proba = model.predict_proba(X_test)
+
+        log_metrics(y_test, preds, proba)
+        mlflow_model_fn(model, "model")
