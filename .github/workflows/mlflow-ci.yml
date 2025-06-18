@@ -132,8 +132,8 @@ jobs:
         run: |
           git lfs install
           git lfs track "mlruns/**/*"
-          git config user.name "covryzne"
-          git config user.email "shendyteuku2@gmail.com"
+          git config user.name "liqolina"
+          git config user.email "lutfiaunher@gmail.com"
 
           git add mlruns/ .gitattributes
           git commit -m "Add MLflow artifacts to LFS" || echo "No changes to commit"
