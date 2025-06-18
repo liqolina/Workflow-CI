@@ -1,108 +1,161 @@
 import os
 import pandas as pd
-import mlflow
-import mlflow.sklearn
-import mlflow.xgboost
-import argparse
-
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from dotenv import load_dotenv
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 from xgboost import XGBClassifier
+import mlflow
 
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score,
-    f1_score, roc_auc_score, log_loss, confusion_matrix
-)
+def log_classification_metrics(y_true, y_pred, training_time):
+    """Calculate and return classification metrics."""
+    return {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, average='weighted', zero_division=0),
+        "recall": recall_score(y_true, y_pred, average='weighted'),
+        "f1_score": f1_score(y_true, y_pred, average='weighted'),
+        "training_time": training_time
+    }
 
-
-def log_metrics(y_true, y_pred, y_proba):
-    acc = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred, average='binary', zero_division=0)
-    recall = recall_score(y_true, y_pred, average='binary')
-    f1 = f1_score(y_true, y_pred, average='binary')
-    auc = roc_auc_score(y_true, y_proba[:, 1])  # <- this is the fix
-    loss = log_loss(y_true, y_proba)
-
+def plot_confusion_matrix(y_true, y_pred, model_name, output_dir):
+    """Generate and save confusion matrix plot."""
     cm = confusion_matrix(y_true, y_pred)
-    tn, fp, fn, tp = cm.ravel() if cm.shape == (2, 2) else (0, 0, 0, 0)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot(cmap='Blues')
+    plt.title(f'Confusion Matrix ({model_name})')
 
-    mlflow.log_metric("accuracy", acc)
-    mlflow.log_metric("precision", precision)
-    mlflow.log_metric("recall", recall)
-    mlflow.log_metric("f1_score", f1)
-    mlflow.log_metric("roc_auc", auc)
-    mlflow.log_metric("log_loss", loss)
-    mlflow.log_metric("true_positive", tp)
-    mlflow.log_metric("true_negative", tn)
-    mlflow.log_metric("false_positive", fp)
-    mlflow.log_metric("false_negative", fn)
+    plot_path = os.path.join(output_dir, f"{model_name}_conf_matrix.png")
+    plt.savefig(plot_path)
+    plt.close()
+    return plot_path
 
-    print(f"Run finished. Accuracy: {acc:.4f} | F1 Score: {f1:.4f} | AUC: {auc:.4f}")
+def plot_feature_importance(model, feature_names, model_name, output_dir):
+    """Plot and save feature importance (if available)."""
+    if not hasattr(model, "feature_importances_"):
+        return None
 
+    plt.figure(figsize=(10, 6))
+    importances = model.feature_importances_
+    indices = np.argsort(importances)[::-1]
+    sns.barplot(x=importances[indices], y=np.array(feature_names)[indices])
+    plt.title(f'Feature Importance ({model_name})')
+    plt.tight_layout()
 
-def train_and_log_model(model_name, model, mlflow_log_fn, X_train, X_test, y_train, y_test, params):
+    feat_path = os.path.join(output_dir, f"{model_name}_feature_importance.png")
+    plt.savefig(feat_path)
+    plt.close()
+    return feat_path
+
+def train_and_log_classifier(model, model_name, X_train, X_test, y_train, y_test, feature_names, params=None):
+    """Train model, log metrics, confusion matrix, and feature importance to MLflow."""
     with mlflow.start_run(run_name=model_name):
-        mlflow.log_param("model_name", model_name)
-        for param, value in params.items():
-            mlflow.log_param(param, value)
-        mlflow.log_param("n_features", X_train.shape[1])
-        mlflow.log_param("n_classes", len(y_train.unique()))
-
+        start_time = time.time()
         model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-        proba = model.predict_proba(X_test)
+        training_time = time.time() - start_time
 
-        log_metrics(y_test, preds, proba)
-        mlflow_log_fn(model, artifact_path=f"{model_name}_model")
+        y_pred = model.predict(X_test)
+        metrics = log_classification_metrics(y_test, y_pred, training_time)
+
+        mlflow.log_param("model_type", model_name)
+        if params:
+            for key, val in params.items():
+                mlflow.log_param(key, val)
+
+            for key, val in metrics.items():
+                mlflow.log_metric(key, val)
+
+        input_example = X_train[:5]
+        if model_name.lower().startswith("xgboost"):
+            mlflow.xgboost.log_model(model, model_name, input_example=input_example)
+        else:
+            mlflow.sklearn.log_model(model, model_name, input_example=input_example)
+
+        output_dir = "Confusion_Matrix_Plots"
+        os.makedirs(output_dir, exist_ok=True)
+
+        plot_path = plot_confusion_matrix(y_test, y_pred, model_name, output_dir)
+        mlflow.log_artifact(plot_path)
+
+        feat_path = plot_feature_importance(model, feature_names, model_name, output_dir)
+        if feat_path:
+            mlflow.log_artifact(feat_path)
+
+        print(
+            f"{model_name} - "
+            f"Acc: {metrics['accuracy']:.4f}, Prec: {metrics['precision']:.4f}, "
+            f"Recall: {metrics['recall']:.4f}, F1: {metrics['f1_score']:.4f}"
+        )
+
+        # Debug
+        print(f"MLflow artifact root: {os.getenv('MLFLOW_ARTIFACT_ROOT', 'mlruns')}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Plot path exists: {os.path.exists(plot_path)}")
+        print(f"Run ID: {run.info.run_id}")
+        
+        # Debug: Cek artifacts di DagsHub
+        client = mlflow.tracking.MlflowClient()
+        try:
+            artifacts = client.list_artifacts(run.info.run_id)
+            print(f"Artifacts for run_id {run.info.run_id}: {[a.path for a in artifacts]}")
+        except Exception as e:
+            print(f"Failed to list artifacts for run_id {run.info.run_id}: {str(e)}")
+        
+        # Cetak run_id untuk GitHub Actions
+        run_id = run.info.run_id
+        print(f"MLFLOW_RUN_ID={run_id}")
 
 
-if __name__ == "__main__":
+def configure_mlflow():
+    """Configure MLflow tracking (DagsHub)."""
+    load_dotenv()
+    tracking_uri = 'https://dagshub.com/liqolina/Workflow-CI.mlflow'
+    username = 'liqolina'
+    token = os.getenv('TOKEN_DAGSHUB')
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--n_estimators", type=int, default=100)
-    parser.add_argument("--max_depth", type=int, default=5)
-    args = parser.parse_args()
+    if not token:
+        raise EnvironmentError("TOKEN_DAGSHUB environment variable is not set.")
 
-    n_estimators = args.n_estimators
-    max_depth = args.max_depth
-
-    # Load and preprocess the dataset
+    os.environ['MLFLOW_TRACKING_URI'] = tracking_uri
+    os.environ['MLFLOW_TRACKING_USERNAME'] = username
+    os.environ['MLFLOW_TRACKING_PASSWORD'] = token
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment("Student_Depression_Classification")
+    
+def main():
+    configure_mlflow()
+    
+    # Load dataset
     data_path = "student_depression_preprocessing.csv"
     if not os.path.exists(data_path):
         raise FileNotFoundError(f"File not found: {data_path}")
-
+    
     df = pd.read_csv(data_path)
 
-    y = df['Depression']
+    # Target & features
+    y = df['Depression']  # Should be categorical: 0/1 or similar
     X = df.drop(columns=[
-        'Depression',
-        'Have you ever had suicidal thoughts ?_Yes',
+        'Depression', 
+        'Have you ever had suicidal thoughts ?_Yes', 
         'Have you ever had suicidal thoughts ?_No',
-        'Total_Stress', 'Satisfaction_Balance', 'Pressure_Balance',
+        'Total_Stress', 'Satisfaction_Balance', 'Pressure_Balance', 
         'Stress_Balance_Ratio', 'Age_Group', 'CGPA_Category'
     ])
-
+    
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Set common parameters
-    n_estimators = 100
-    max_depth = 5
+    # Define classifiers
+    models = [
+        ("Logistic Regression", LogisticRegression(max_iter=1000)),
+        ("Random Forest", RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42)),
+        ("XGBoost", XGBClassifier(n_estimators=100, learning_rate=0.1, random_state=42, use_label_encoder=False, eval_metric='logloss'))
+    ]
 
-    # Train and log Logistic Regression
-    logistic_model = LogisticRegression(max_iter=1000)
-    train_and_log_model("logistic_regression", logistic_model, mlflow.sklearn.log_model,
-                        X_train, X_test, y_train, y_test, {})
+    for model_name, model in models:
+        train_and_log_classifier(model, model_name, X_train, X_test, y_train, y_test)
 
-    # Train and log Random Forest
-    rf_model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42)
-    train_and_log_model("random_forest", rf_model, mlflow.sklearn.log_model,
-                        X_train, X_test, y_train, y_test,
-                        {"n_estimators": n_estimators, "max_depth": max_depth})
-
-    # Train and log XGBoost
-    xgb_model = XGBClassifier(n_estimators=n_estimators, max_depth=max_depth,
-                              use_label_encoder=False, eval_metric='logloss', random_state=42)
-    train_and_log_model("xgboost", xgb_model, mlflow.xgboost.log_model,
-                        X_train, X_test, y_train, y_test,
-                        {"n_estimators": n_estimators, "max_depth": max_depth})
+if __name__ == "__main__":
+    main()
