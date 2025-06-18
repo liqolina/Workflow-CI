@@ -1,4 +1,4 @@
-name: MLflow CI/CD Pipeline
+name: MLflow CI Workflow
 
 on:
   push:
@@ -9,119 +9,78 @@ on:
 permissions:
   contents: write
 
-env:
-  MLFLOW_TRACKING_URI: https://dagshub.com/liqolina/Workflow-CI.mlflow
-  MLFLOW_TRACKING_USERNAME: liqolina
-  PYTHON_VERSION: "3.12.7"
-
 jobs:
-  ml-pipeline:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
-      # 1. Setup environment
       - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          lfs: true
+        uses: actions/checkout@v3
 
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          python-version: "3.12"
 
-      - name: Verify Environment
+      - name: Install conda and MLflow dependencies
         run: |
-          python --version
-          pip --version
-          which python
+          pip install mlflow==2.17.0
 
-      # 2. Install dependencies
-      - name: Install Python dependencies
+      - name: Configure MLflow Tracking
         run: |
-          pip install --upgrade pip
-          pip install mlflow==2.17.0 \
-                      scikit-learn==1.5.2 \
-                      pandas==2.2.3 \
-                      numpy==2.1.2 \
-                      xgboost==2.1.1 \
-                      matplotlib==3.9.2 \
-                      seaborn==0.13.2 \
-                      python-dotenv==1.0.1 \
-                      dagshub==0.3.12
+          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
 
-      # 3. Configure MLflow
-      - name: Set up MLflow tracking
-        env:
-          MLFLOW_TRACKING_PASSWORD: ${{ secrets.TOKEN_DAGSHUB }}
-        run: |
-          echo "MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD" >> $GITHUB_ENV
-
-      # 4. Run MLflow project
-      - name: Execute ML pipeline
+      - name: Run MLflow Project
         env:
           DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
-          DATA_PATH: "student_depression_preprocessing.csv"
         run: |
-          cd MLProject
-          mlflow run . \
-            --env-manager=local \
-            -P data_path=$DATA_PATH | tee mlflow_output.log
-          
-          # Extract run ID from MLflow output
-          RUN_ID=$(grep -oP '(?<=Run ID: ).*' mlflow_output.log | head -1)
-          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
-          echo "MLFLOW_RUN_ID=$RUN_ID" >> $GITHUB_ENV
+          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv | tee mlflow_output.log
+          grep "MLFLOW_RUN_ID=" mlflow_output.log | cut -d'=' -f2 > run_id.txt
 
-      # 5. Model artifact handling
-      - name: Setup Git LFS
-        if: ${{ env.RUN_ID != '' }}
+      - name: Install Git LFS
         run: |
           sudo apt-get update && sudo apt-get install git-lfs -y
           git lfs install
-          git lfs track "mlruns/**"
+
+      - name: Track MLflow model artifacts
+        run: |
+          RUN_ID=$(cat run_id.txt)
+          git lfs track "mlruns/0/$RUN_ID/artifacts/model/**"
           git add .gitattributes
 
-      - name: Commit and push artifacts
-        if: ${{ env.RUN_ID != '' }}
+      - name: Configure Git user
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add mlruns/
-          git diff --cached --quiet || \
-            git commit -m "chore: Add MLflow artifacts for run $RUN_ID [skip ci]"
-          git push origin HEAD:$GITHUB_REF
 
-      - name: Build and push Docker image
-        if: ${{ env.RUN_ID != '' && github.ref == 'refs/heads/main' }}
-        env:
-          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/mh-model
-          MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}
-          MLFLOW_TRACKING_USERNAME: ${{ env.MLFLOW_TRACKING_USERNAME }}
-          MLFLOW_TRACKING_PASSWORD: ${{ secrets.TOKEN_DAGSHUB }}
+      - name: Commit MLflow artifacts
         run: |
-          # Install Docker
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-          sudo systemctl start docker
-          
-          # Authenticate with MLflow tracking server
-          mlflow login --username $MLFLOW_TRACKING_USERNAME --password $MLFLOW_TRACKING_PASSWORD
-          
-          # Build Docker image with explicit authentication
+          RUN_ID=$(cat run_id.txt)
+          git add mlruns/0/$RUN_ID/artifacts/model/
+          git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $RUN_ID [skip ci]"
+
+      - name: Push artifacts to GitHub
+        run: git push origin main
+
+      - name: Build MLflow serving Docker image
+        run: |
+          RUN_ID=$(cat run_id.txt)
           mlflow models build-docker \
             --model-uri "runs:/$RUN_ID/model" \
-            --name "$DOCKER_IMAGE" \
-            --env-manager local \
-            --install-mlflow
-          
-          # Login to Docker Hub and push
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-          docker tag "$DOCKER_IMAGE:latest" "$DOCKER_IMAGE:$RUN_ID"
-          docker push "$DOCKER_IMAGE:latest"
-          docker push "$DOCKER_IMAGE:$RUN_ID"
+            --name "mh-model"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag Docker image
+        run: |
+          docker tag mh-model:latest ${{ secrets.DOCKERHUB_USERNAME }}/mh-model:latest
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mh-model:latest
