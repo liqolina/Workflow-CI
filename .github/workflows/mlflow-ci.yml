@@ -1,177 +1,122 @@
-name: MLflow CI Workflow
+name: MLflow CI/CD Pipeline
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-    
+
 permissions:
   contents: write
-    
+
+env:
+  MLFLOW_TRACKING_URI: https://dagshub.com/liqolina/Workflow-CI.mlflow
+  MLFLOW_TRACKING_USERNAME: liqolina
+  PYTHON_VERSION: "3.12.7"
+
 jobs:
-  build:
+  ml-pipeline:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
+      # 1. Setup environment
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          lfs: true
 
-      - name: Set up Python 3.12.7
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v4
         with:
-          python-version: "3.12.7"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
 
-      - name: Check Env
+      - name: Verify Environment
         run: |
           python --version
           pip --version
+          which python
 
-      - name: Install dependencies
+      # 2. Install dependencies
+      - name: Install Python dependencies
         run: |
-          pip install mlflow==2.17.0 scikit-learn==1.5.2 pandas==2.2.3 numpy==2.1.2 xgboost==2.1.1 matplotlib==3.9.2 seaborn==0.13.2 python-dotenv==1.0.1
+          pip install --upgrade pip
+          pip install mlflow==2.17.0 \
+                      scikit-learn==1.5.2 \
+                      pandas==2.2.3 \
+                      numpy==2.1.2 \
+                      xgboost==2.1.1 \
+                      matplotlib==3.9.2 \
+                      seaborn==0.13.2 \
+                      python-dotenv==1.0.1 \
+                      dagshub==0.3.12
 
-      - name: Configure MLflow Tracking
+      # 3. Configure MLflow
+      - name: Set up MLflow tracking
+        env:
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.TOKEN_DAGSHUB }}
         run: |
-          echo "MLFLOW_TRACKING_URI=https://dagshub.com/liqolina/Workflow-CI.mlflow" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_USERNAME=liqolina" >> $GITHUB_ENV
-          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.TOKEN_DAGSHUB }}" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD" >> $GITHUB_ENV
 
-      - name: Run MLflow Project
+      # 4. Run MLflow project
+      - name: Execute ML pipeline
         env:
           DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
+          DATA_PATH: "student_depression_preprocessing.csv"
         run: |
           cd MLProject
-          mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv | tee mlflow_output.log
+          mlflow run . \
+            --env-manager=local \
+            -P data_path=$DATA_PATH | tee mlflow_output.log
+          
+          # Extract run ID from MLflow output
+          RUN_ID=$(grep -oP '(?<=Run ID: ).*' mlflow_output.log | head -1)
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+          echo "MLFLOW_RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
-          # Extract run IDs
-          run_ids=($(grep 'MLFLOW_RUN_ID=' mlflow_output.log | cut -d'=' -f2))
-          linear_run_id=${run_ids[0]}
-          rf_run_id=${run_ids[1]}
-          xgb_run_id=${run_ids[2]}
-
-          if [ -z "$xgb_run_id" ]; then
-            echo "XGBoost run ID not found"
-            cat mlflow_output.log
-            exit 1
-          fi
-
-          echo "linear_run_id=$linear_run_id" >> $GITHUB_ENV
-          echo "rf_run_id=$rf_run_id" >> $GITHUB_ENV
-          echo "xgb_run_id=$xgb_run_id" >> $GITHUB_ENV
-
-          echo "Linear Regression Run ID: $linear_run_id"
-          echo "Random Forest Run ID: $rf_run_id"
-          echo "XGBoost Run ID: $xgb_run_id"
-
-      - name: Download MLflow Artifacts
-        env:
-          DAGSHUB_TOKEN: ${{ secrets.TOKEN_DAGSHUB }}
+      # 5. Model artifact handling
+      - name: Setup Git LFS
+        if: ${{ env.RUN_ID != '' }}
         run: |
-          export MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI
-          export MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME
-          export MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD
-
-          mkdir -p mlruns/0
-
-          cat << 'EOF' > download_run.py
-          import mlflow
-          from mlflow.tracking import MlflowClient
-          import os, traceback
-
-          def download_run(run_id, dst_path):
-              client = MlflowClient()
-              os.makedirs(dst_path, exist_ok=True)
-              try:
-                  artifact_path = client.download_artifacts(run_id, ".", dst_path)
-                  print(f"Downloaded artifacts for {run_id} to {artifact_path}")
-              except Exception as e:
-                  print(f"Download failed for {run_id}: {e}")
-                  traceback.print_exc()
-                  os.makedirs(os.path.join(dst_path, "artifacts"), exist_ok=True)
-
-              try:
-                  artifacts = client.list_artifacts(run_id)
-                  print(f"Artifacts for {run_id}: {[a.path for a in artifacts]}")
-              except Exception as e:
-                  print(f"List artifacts failed for {run_id}: {e}")
-                  traceback.print_exc()
-
-              try:
-                  run = client.get_run(run_id)
-                  with open(os.path.join(dst_path, "meta.yaml"), "w") as f:
-                      f.write(f"""artifact_uri: {run.info.artifact_uri}
-                      end_time: {run.info.end_time}
-                      experiment_id: {run.info.experiment_id}
-                      lifecycle_stage: {run.info.lifecycle_stage}
-                      run_id: {run.info.run_id}
-                      run_uuid: {run.info.run_uuid}
-                      start_time: {run.info.start_time}
-                      status: {run.info.status}
-                      user_id: {run.info.user_id}
-                      """)
-                      
-                  print(f"meta.yaml created for {run_id}")
-                  
-              except Exception as e:
-                  print(f"meta.yaml creation failed for {run_id}: {e}")
-                  traceback.print_exc()
-                  exit(1)
-
-          if __name__ == "__main__":
-              for run_id in ["${{ env.linear_run_id }}", "${{ env.rf_run_id }}", "${{ env.xgb_run_id }}"]:
-                  dst_path = f"mlruns/0/{run_id}"
-                  download_run(run_id, dst_path)
-                  if not os.path.exists(f"{dst_path}/meta.yaml"):
-                      print(f"Incomplete artifacts for {run_id}")
-                      exit(1)
-          EOF
-
-          python download_run.py
-          ls -la mlruns/
-
-      - name: Upload Artifacts to GitHub LFS
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
+          sudo apt-get update && sudo apt-get install git-lfs -y
           git lfs install
-          git lfs track "mlruns/**/*"
-          git config user.name "liqolina"
-          git config user.email "lutfiaunher@gmail.com"
+          git lfs track "mlruns/**"
+          git add .gitattributes
 
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}
-
-          git add mlruns/ .gitattributes
-          git commit -m "Add MLflow artifacts to LFS" || echo "No changes to commit"
-          git push origin main
-
-
-      - name: Build Docker Image
+      - name: Commit and push artifacts
+        if: ${{ env.RUN_ID != '' }}
         run: |
-          docker build \
-            -t workflow-ci:latest \
-            --build-arg RUN_ID=${{ env.xgb_run_id }} \
-            --build-arg MODEL_NAME=XGBoost \
-            -f MLProject/Dockerfile .
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add mlruns/
+          git diff --cached --quiet || \
+            git commit -m "chore: Add MLflow artifacts for run $RUN_ID [skip ci]"
+          git push origin HEAD:$GITHUB_REF
 
-      - name: Docker Login
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Tag Docker Image
+      # 6. Docker image build and push
+      - name: Build and push Docker image
+        if: ${{ env.RUN_ID != '' && github.ref == 'refs/heads/main' }}
+        env:
+          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/mh-model
         run: |
-          docker tag workflow-ci:latest ${{ secrets.DOCKERHUB_USERNAME }}/workflow-ci:latest
+          # Build Docker image
+          mlflow models build-docker \
+            --model-uri "runs:/$RUN_ID/model" \
+            --name "$DOCKER_IMAGE"
 
-      - name: Push Docker Image
+          # Login and push
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+          docker tag "$DOCKER_IMAGE:latest" "$DOCKER_IMAGE:$RUN_ID"
+          docker push "$DOCKER_IMAGE:latest"
+          docker push "$DOCKER_IMAGE:$RUN_ID"
+
+      # 7. Cleanup
+      - name: Remove sensitive data
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/workflow-ci:latest
-
-      - name: Docker Logout
-        if: always()
-        run: docker logout
-
-      - name: Finish CI Workflow
-        if: always()
-        run: echo "CI pipeline completed successfully."
+          unset MLFLOW_TRACKING_PASSWORD
+          unset DAGSHUB_TOKEN
+          unset DOCKERHUB_TOKEN
