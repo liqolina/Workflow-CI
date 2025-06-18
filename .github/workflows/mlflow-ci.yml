@@ -128,6 +128,8 @@ jobs:
           ls -la mlruns/
 
       - name: Upload Artifacts to GitHub LFS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git lfs install
           git lfs track "mlruns/**/*"
@@ -137,8 +139,7 @@ jobs:
           git add mlruns/ .gitattributes
           git commit -m "Add MLflow artifacts to LFS" || echo "No changes to commit"
           git push origin main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Build Docker Image
         run: |
