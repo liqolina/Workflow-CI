@@ -61,6 +61,7 @@ jobs:
 
           echo "Linear Regression Run ID: $linear_run_id"
           echo "Random Forest Run ID: $rf_run_id"
+          echo "XGBoost Run ID: $xgb_run_id"
 
       - name: Download MLflow Artifacts
         env:
@@ -110,7 +111,7 @@ jobs:
                   exit(1)
 
           if __name__ == "__main__":
-              for run_id in ["${{ env.linear_run_id }}", "${{ env.rf_run_id }}"]:
+              for run_id in ["${{ env.linear_run_id }}", "${{ env.rf_run_id }}", "${{ env.xgb_run_id }}"]:
                   dst_path = f"mlruns/0/{run_id}"
                   download_run(run_id, dst_path)
                   if not os.path.exists(f"{dst_path}/meta.yaml"):
@@ -123,7 +124,7 @@ jobs:
 
       - name: Reorganize MLflow Artifacts
         run: |
-          for run_id in "${{ env.linear_run_id }}" "${{ env.rf_run_id }}"; do
+          for run_id in "${{ env.linear_run_id }}" "${{ env.rf_run_id }} "${{ env.xgb_run_id }}""; do
             folder="mlruns/0/$run_id"
             echo "Reorganizing $folder..."
 
@@ -137,6 +138,8 @@ jobs:
                 mv "$folder/model" "$folder/Linear_Regression"
               elif [ "$run_id" = "${{ env.rf_run_id }}" ]; then
                 mv "$folder/model" "$folder/Random_Forest"
+              elif [ "$run_id" = "${{ env.xgb_run_id }}" ]; then
+                mv "$folder/model" "$folder/XGBoost"
               fi
             fi
           done
