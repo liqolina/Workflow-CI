@@ -71,32 +71,40 @@ jobs:
           export MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI
           export MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME
           export MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD
-
+      
           mkdir -p mlruns/0
-
+      
           cat << 'EOF' > download_run.py
           import mlflow
           from mlflow.tracking import MlflowClient
           import os, traceback
-
+      
           def download_run(run_id, dst_path):
               client = MlflowClient()
               os.makedirs(dst_path, exist_ok=True)
               try:
-                  artifact_path = client.download_artifacts(run_id, ".", dst_path)
-                  print(f"Downloaded artifacts for {run_id} to {artifact_path}")
+                  # List all top-level artifacts (e.g., folders like Logistic_Regression)
+                  artifacts = client.list_artifacts(run_id)
+                  for artifact in artifacts:
+                      if artifact.is_dir:
+                          # Download the entire directory (e.g., Logistic_Regression/)
+                          client.download_artifacts(run_id, artifact.path, dst_path)
+                      else:
+                          client.download_artifacts(run_id, artifact.path, dst_path)
+                  print(f"Downloaded artifacts for {run_id} to {dst_path}")
               except Exception as e:
                   print(f"Download failed for {run_id}: {e}")
                   traceback.print_exc()
                   os.makedirs(os.path.join(dst_path, "artifacts"), exist_ok=True)
-
+      
               try:
+                  # List for debugging
                   artifacts = client.list_artifacts(run_id)
                   print(f"Artifacts for {run_id}: {[a.path for a in artifacts]}")
               except Exception as e:
                   print(f"List artifacts failed for {run_id}: {e}")
                   traceback.print_exc()
-
+      
               try:
                   run = client.get_run(run_id)
                   with open(os.path.join(dst_path, "meta.yaml"), "w") as f:
@@ -112,12 +120,11 @@ jobs:
                       """)
                       
                   print(f"meta.yaml created for {run_id}")
-                  
               except Exception as e:
                   print(f"meta.yaml creation failed for {run_id}: {e}")
                   traceback.print_exc()
                   exit(1)
-
+      
           if __name__ == "__main__":
               for run_id in ["${{ env.linear_run_id }}", "${{ env.rf_run_id }}", "${{ env.xgb_run_id }}"]:
                   dst_path = f"mlruns/0/{run_id}"
@@ -126,7 +133,7 @@ jobs:
                       print(f"Incomplete artifacts for {run_id}")
                       exit(1)
           EOF
-
+      
           python download_run.py
           ls -la mlruns/
 
