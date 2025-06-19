@@ -5,10 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    
+
 permissions:
   contents: write
-    
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -44,14 +44,13 @@ jobs:
           cd MLProject
           mlflow run . --env-manager=local -P data_path=student_depression_preprocessing.csv | tee mlflow_output.log
 
-          # Extract run IDs
           run_ids=($(grep 'MLFLOW_RUN_ID=' mlflow_output.log | cut -d'=' -f2))
           linear_run_id=${run_ids[0]}
           rf_run_id=${run_ids[1]}
           xgb_run_id=${run_ids[2]}
 
-          if [ -z "$xgb_run_id" ]; then
-            echo "XGBoost run ID not found"
+          if [ -z "$rf_run_id" ]; then
+            echo "Random Forest run ID not found"
             cat mlflow_output.log
             exit 1
           fi
@@ -62,7 +61,6 @@ jobs:
 
           echo "Linear Regression Run ID: $linear_run_id"
           echo "Random Forest Run ID: $rf_run_id"
-          echo "XGBoost Run ID: $xgb_run_id"
 
       - name: Download MLflow Artifacts
         env:
@@ -71,40 +69,27 @@ jobs:
           export MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI
           export MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME
           export MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD
-      
+
           mkdir -p mlruns/0
-      
+
           cat << 'EOF' > download_run.py
           import mlflow
           from mlflow.tracking import MlflowClient
           import os, traceback
-      
+
           def download_run(run_id, dst_path):
               client = MlflowClient()
               os.makedirs(dst_path, exist_ok=True)
               try:
-                  # List all top-level artifacts (e.g., folders like Logistic_Regression)
                   artifacts = client.list_artifacts(run_id)
                   for artifact in artifacts:
-                      if artifact.is_dir:
-                          # Download the entire directory (e.g., Logistic_Regression/)
-                          client.download_artifacts(run_id, artifact.path, dst_path)
-                      else:
-                          client.download_artifacts(run_id, artifact.path, dst_path)
+                      client.download_artifacts(run_id, artifact.path, dst_path)
                   print(f"Downloaded artifacts for {run_id} to {dst_path}")
               except Exception as e:
                   print(f"Download failed for {run_id}: {e}")
                   traceback.print_exc()
                   os.makedirs(os.path.join(dst_path, "artifacts"), exist_ok=True)
-      
-              try:
-                  # List for debugging
-                  artifacts = client.list_artifacts(run_id)
-                  print(f"Artifacts for {run_id}: {[a.path for a in artifacts]}")
-              except Exception as e:
-                  print(f"List artifacts failed for {run_id}: {e}")
-                  traceback.print_exc()
-      
+
               try:
                   run = client.get_run(run_id)
                   with open(os.path.join(dst_path, "meta.yaml"), "w") as f:
@@ -118,24 +103,43 @@ jobs:
                       status: {run.info.status}
                       user_id: {run.info.user_id}
                       """)
-                      
                   print(f"meta.yaml created for {run_id}")
               except Exception as e:
                   print(f"meta.yaml creation failed for {run_id}: {e}")
                   traceback.print_exc()
                   exit(1)
-      
+
           if __name__ == "__main__":
-              for run_id in ["${{ env.linear_run_id }}", "${{ env.rf_run_id }}", "${{ env.xgb_run_id }}"]:
+              for run_id in ["${{ env.linear_run_id }}", "${{ env.rf_run_id }}"]:
                   dst_path = f"mlruns/0/{run_id}"
                   download_run(run_id, dst_path)
                   if not os.path.exists(f"{dst_path}/meta.yaml"):
                       print(f"Incomplete artifacts for {run_id}")
                       exit(1)
           EOF
-      
+
           python download_run.py
           ls -la mlruns/
+
+      - name: Reorganize MLflow Artifacts
+        run: |
+          for run_id in "${{ env.linear_run_id }}" "${{ env.rf_run_id }}"; do
+            folder="mlruns/0/$run_id"
+            echo "Reorganizing $folder..."
+
+            model_dir=$(find "$folder" -maxdepth 1 -type d ! -path "$folder" -exec basename {} \;)
+            echo "Found model folder: $model_dir"
+
+            if [ -n "$model_dir" ]; then
+              mv "$folder/$model_dir" "$folder/model"
+
+              if [ "$run_id" = "${{ env.linear_run_id }}" ]; then
+                mv "$folder/model" "$folder/Linear_Regression"
+              elif [ "$run_id" = "${{ env.rf_run_id }}" ]; then
+                mv "$folder/model" "$folder/Random_Forest"
+              fi
+            fi
+          done
 
       - name: Upload Artifacts to GitHub LFS
         env:
@@ -152,13 +156,18 @@ jobs:
           git commit -m "Add MLflow artifacts to LFS" || echo "No changes to commit"
           git push origin main
 
+      - name: Upload mlruns as GitHub Actions Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlruns-artifacts
+          path: mlruns/
 
       - name: Build Docker Image
         run: |
           docker build \
             -t workflow-ci:latest \
-            --build-arg RUN_ID=${{ env.xgb_run_id }} \
-            --build-arg MODEL_NAME=XGBoost \
+            --build-arg RUN_ID=${{ env.rf_run_id }} \
+            --build-arg MODEL_NAME=Random_Forest \
             -f MLProject/Dockerfile .
 
       - name: Docker Login
