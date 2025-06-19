@@ -14,6 +14,7 @@ from sklearn.metrics import (
 )
 from xgboost import XGBClassifier
 import mlflow
+import argparse
 
 # ------------------------- Metrics & Plotting -------------------------
 def log_classification_metrics(y_true, y_pred, training_time):
@@ -123,13 +124,16 @@ def configure_mlflow():
 
 # ------------------------- Main Logic -------------------------
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_path', type=str, default='student_depression_preprocessing.csv')
+    args = parser.parse_args()
+    
     configure_mlflow()
 
-    data_path = "student_depression_preprocessing.csv"
-    if not os.path.exists(data_path):
-        raise FileNotFoundError(f"File not found: {data_path}")
+    if not os.path.exists(args.data_path):
+        raise FileNotFoundError(f"File not found: {args.data_path}")
 
-    df = pd.read_csv(data_path)
+    df = pd.read_csv(args.data_path)
 
     # Target and features
     y = df['Depression']
