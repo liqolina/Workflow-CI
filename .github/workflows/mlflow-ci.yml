@@ -5,9 +5,9 @@ permissions:
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build-and-deploy:
@@ -75,7 +75,7 @@ jobs:
           git diff --quiet && echo "No new artifacts to commit" || git commit -m "chore: add MLflow model artifacts for run $RUN_ID [skip ci]"
 
       - name: Push artifacts to GitHub
-        run: git push origin master
+        run: git push origin main
 
       # 8. Build MLflow model Docker image
       - name: Build MLflow Docker image
