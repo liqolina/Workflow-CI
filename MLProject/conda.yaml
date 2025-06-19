@@ -14,4 +14,3 @@ dependencies:
       - xgboost
       - load_dotenv
       - argparse
-      - python-dotenv
