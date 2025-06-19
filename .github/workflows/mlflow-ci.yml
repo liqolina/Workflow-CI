@@ -124,7 +124,7 @@ jobs:
 
       - name: Reorganize MLflow Artifacts
         run: |
-          for run_id in "${{ env.linear_run_id }}" "${{ env.rf_run_id }} "${{ env.xgb_run_id }}""; do
+          for run_id in "${{ env.linear_run_id }}" "${{ env.rf_run_id }}" "${{ env.xgb_run_id }}"; do
             folder="mlruns/0/$run_id"
             echo "Reorganizing $folder..."
 
