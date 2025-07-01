@@ -175,7 +175,7 @@ jobs:
         run: |
           docker build \
             -t workflow-ci:latest \
-            -f Dockerfile .
+            -f MLProject/Dockerfile .
       
       - name: Docker Login
         uses: docker/login-action@v2
