@@ -165,14 +165,18 @@ jobs:
           name: mlruns-artifacts
           path: mlruns/
 
+      - name: Prepare Model for Docker
+        run: |
+          mkdir -p model
+          cp -r mlruns/0/${{ env.rf_run_id }}/Random_Forest/model/* model/
+          ls -la model/  # Verify contents
+
       - name: Build Docker Image
         run: |
           docker build \
             -t workflow-ci:latest \
-            --build-arg RUN_ID=${{ env.rf_run_id }} \
-            --build-arg MODEL_NAME=Random_Forest \
-            -f MLProject/Dockerfile .
-
+            -f Dockerfile .
+      
       - name: Docker Login
         uses: docker/login-action@v2
         with:
