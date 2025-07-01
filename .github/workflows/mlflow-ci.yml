@@ -168,7 +168,7 @@ jobs:
       - name: Prepare Model for Docker
         run: |
           mkdir -p model
-          cp -r mlruns/0/${{ env.rf_run_id }}/Random_Forest/model/* model/
+          cp -r mlruns/0/${{ env.rf_run_id }}/Random_Forest/* model/
           ls -la model/  # Verify contents
 
       - name: Build Docker Image
